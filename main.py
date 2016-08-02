@@ -1,9 +1,7 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
-import numbers, operator, string
-import pykube
-from prometheus_client import start_http_server
-from prometheus_client.core import GaugeMetricFamily, REGISTRY
+import numbers, string, optparse, time, signal, logging, sys
+import pykube, prometheus_client, prometheus_client.core
 
 
 class KubernetesAPICollector(object):
@@ -12,9 +10,9 @@ class KubernetesAPICollector(object):
     self.api = api
 
   def collect(self):
-    for deployment in pykube.Deployment.objects(api):
-      labels = labels_for_deployement(deployment)
-      for ts in ts_for_obj(deployement, labels, path=["k8s", "deployment"]):
+    for deployment in pykube.Deployment.objects(api).all():
+      labels = labels_for_deployement(deployment.obj)
+      for ts in ts_for_obj(deployment.obj, labels, path=["k8s", "deployment"]):
         yield ts
 
 
@@ -34,7 +32,7 @@ def safe_lookup(d, ks, default=None):
 
 
 def ts_for_obj(obj, labels, path=[]):
-  for key, value in obj.iteritems():
+  for key, value in obj.items():
     key_path = list(path)
     key_path.append(key)
 
@@ -42,11 +40,15 @@ def ts_for_obj(obj, labels, path=[]):
       for ts in ts_for_obj(value, labels, path=key_path):
         yield ts
 
-    elif is_instance(value, labels, numbers.Number):
-      label_keys, label_values = zip(*key_path.items())
-      gauge = GaugeMetricFamily(string.join(path, "_"), labels=label_keys)
+    elif isinstance(value, numbers.Number):
+      label_keys, label_values = zip(*labels.items())
+      gauge = prometheus_client.core.GaugeMetricFamily("_".join(key_path), "Help text", labels=label_keys)
       gauge.add_metric(label_values, value)
       yield gauge
+
+
+def sigterm_handler(_signo, _stack_frame):
+  sys.exit(0)
 
 
 if __name__ == "__main__":
@@ -56,7 +58,12 @@ if __name__ == "__main__":
     help="Port to serve HTTP interface")
   (options, args) = parser.parse_args()
 
-  api = pykube.HTTPClient(pykube.KubeConfig.from_service_account())
-  REGISTRY.register(KubernetesAPICollector(api))
-  start_http_server(options.port)
+  logging.info("Listening on %d", options.port)
 
+  api = pykube.HTTPClient(pykube.KubeConfig.from_service_account())
+  prometheus_client.REGISTRY.register(KubernetesAPICollector(api))
+  prometheus_client.start_http_server(options.port)
+
+  signal.signal(signal.SIGTERM, sigterm_handler)
+  while True:
+    time.sleep(1)
