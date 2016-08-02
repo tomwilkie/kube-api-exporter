@@ -4,16 +4,39 @@ import numbers, string, optparse, time, signal, logging, sys
 import pykube, prometheus_client, prometheus_client.core
 
 
-class KubernetesAPICollector(object):
+class KubernetesAPIExporter(object):
 
   def __init__(self, api):
     self.api = api
+    self.gauge_cache = {}
 
   def collect(self):
+    self.gauge_cache = {}
+
     for deployment in pykube.Deployment.objects(api).all():
       labels = labels_for_deployement(deployment.obj)
-      for ts in ts_for_obj(deployment.obj, labels, path=["k8s", "deployment"]):
-        yield ts
+      self.record_ts_for_obj(deployment.obj, labels, path=["k8s", "deployment"])
+
+    for gauge in self.gauge_cache.values():
+      yield gauge
+
+  def record_ts_for_obj(self, obj, labels, path=[]):
+    for key, value in obj.items():
+      key_path = list(path)
+      key_path.append(key)
+
+      if isinstance(value, dict):
+        self.record_ts_for_obj(value, labels, path=key_path)
+
+      elif isinstance(value, numbers.Number):
+        label_keys, label_values = zip(*labels.items())
+        metric_name = "_".join(key_path)
+        if metric_name not in self.gauge_cache:
+          gauge = prometheus_client.core.GaugeMetricFamily(metric_name, "Help text", labels=label_keys)
+          self.gauge_cache[metric_name] = gauge
+        else:
+          gauge = self.gauge_cache[metric_name]
+        gauge.add_metric(label_values, value)
 
 
 def labels_for_deployement(dep):
@@ -31,22 +54,6 @@ def safe_lookup(d, ks, default=None):
   return d
 
 
-def ts_for_obj(obj, labels, path=[]):
-  for key, value in obj.items():
-    key_path = list(path)
-    key_path.append(key)
-
-    if isinstance(value, dict):
-      for ts in ts_for_obj(value, labels, path=key_path):
-        yield ts
-
-    elif isinstance(value, numbers.Number):
-      label_keys, label_values = zip(*labels.items())
-      gauge = prometheus_client.core.GaugeMetricFamily("_".join(key_path), "Help text", labels=label_keys)
-      gauge.add_metric(label_values, value)
-      yield gauge
-
-
 def sigterm_handler(_signo, _stack_frame):
   sys.exit(0)
 
@@ -61,7 +68,7 @@ if __name__ == "__main__":
   logging.info("Listening on %d", options.port)
 
   api = pykube.HTTPClient(pykube.KubeConfig.from_service_account())
-  prometheus_client.REGISTRY.register(KubernetesAPICollector(api))
+  prometheus_client.REGISTRY.register(KubernetesAPIExporter(api))
   prometheus_client.start_http_server(options.port)
 
   signal.signal(signal.SIGTERM, sigterm_handler)
