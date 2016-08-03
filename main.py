@@ -1,4 +1,7 @@
 #!/usr/bin/python3
+#
+# Kubernetes API Exporter - expose various numbers from the Kubernetes API as
+# Prometheus metrics, such that you can alert on them.
 
 import numbers, string, optparse, time, signal, logging, sys
 import pykube, prometheus_client, prometheus_client.core
