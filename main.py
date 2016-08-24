@@ -17,7 +17,7 @@ class KubernetesAPIExporter(object):
     self.gauge_cache = {}
 
     for deployment in pykube.Deployment.objects(api).all():
-      labels = labels_for_deployement(deployment.obj)
+      labels = labels_for_deployment(deployment.obj)
       self.record_ts_for_obj(deployment.obj, labels, path=["k8s", "deployment"])
 
     for gauge in self.gauge_cache.values():
@@ -42,7 +42,7 @@ class KubernetesAPIExporter(object):
         gauge.add_metric(label_values, value)
 
 
-def labels_for_deployement(dep):
+def labels_for_deployment(dep):
   return {
     "namespace": safe_lookup(dep, ["metadata", "namespace"], default="default"),
     "name": safe_lookup(dep, ["metadata", "labels", "name"], default=""),
