@@ -51,7 +51,7 @@ With this, you can configure the following rules to generate alerts when deploym
       }
 
     ALERT DeploymentReplicasMismatch
-      IF          k8s_deployment_spec_replicas{job="kube-api-exporter"} != k8s_deployment_status_availableReplicas{job="kube-api-exporter"}
+      IF          (k8s_deployment_spec_replicas{job="kube-api-exporter"} != k8s_deployment_status_availableReplicas{job="kube-api-exporter"}) or (k8s_deployment_spec_replicas{job="kube-api-exporter"} unless k8s_deployment_status_availableReplicas{job="kube-api-exporter"})
       FOR         5m
       LABELS      { severity="critical" }
       ANNOTATIONS {
