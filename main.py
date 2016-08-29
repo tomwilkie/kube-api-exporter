@@ -46,7 +46,7 @@ class KubernetesAPIExporter(object):
 def labels_for_deployment(dep):
   return {
     "namespace": safe_lookup(dep, ["metadata", "namespace"], default="default"),
-    "name": safe_lookup(dep, ["metadata", "labels", "name"], default=""),
+    "name": safe_lookup(dep, ["metadata", "name"], default=""),
   }
 
 
