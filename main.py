@@ -16,6 +16,7 @@ class KubernetesAPIExporter(object):
   def collect(self):
     self.gauge_cache = {}
 
+    pykube.Deployment.objects.namespace = None
     for deployment in pykube.Deployment.objects(api).all():
       labels = labels_for_deployment(deployment.obj)
       self.record_ts_for_obj(deployment.obj, labels, path=["k8s", "deployment"])
