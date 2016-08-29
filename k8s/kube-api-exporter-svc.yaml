@@ -2,6 +2,9 @@ apiVersion: v1
 kind: Service
 metadata:
   name: kube-api-exporter
+  annotations:
+    prometheus.io/scrape: 'true'
+    prometheus.io/path: '/'
 spec:
   ports:
     - port: 80
