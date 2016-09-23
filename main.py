@@ -3,7 +3,7 @@
 # Kubernetes API Exporter - expose various numbers from the Kubernetes API as
 # Prometheus metrics, such that you can alert on them.
 
-import numbers, string, optparse, time, signal, logging, sys
+import numbers, string, optparse, time, signal, logging, sys, collections
 import pykube, prometheus_client, prometheus_client.core
 
 
@@ -18,37 +18,55 @@ class KubernetesAPIExporter(object):
 
     pykube.Deployment.objects.namespace = None
     for deployment in pykube.Deployment.objects(api).all():
-      labels = labels_for_deployment(deployment.obj)
-      self.record_ts_for_obj(deployment.obj, labels, path=["k8s", "deployment"])
+      labels = labels_for(deployment.obj)
+      self.record_ts_for_thing(deployment.obj, labels, ["k8s", "deployment"])
+
+    pykube.Pod.objects.namespace = None
+    for pod in pykube.Pod.objects(api).all():
+      labels = labels_for(pod.obj)
+      self.record_ts_for_thing(pod.obj, labels, ["k8s", "pod"])
 
     for gauge in self.gauge_cache.values():
       yield gauge
 
-  def record_ts_for_obj(self, obj, labels, path=[]):
+  def record_ts_for_thing(self, value, labels, path):
+    if isinstance(value, dict):
+      self.record_ts_for_obj(value, labels, path)
+
+    elif isinstance(value, list):
+      self.record_ts_for_list(value, labels, path)
+
+    elif isinstance(value, numbers.Number):
+      label_keys, label_values = zip(*labels.items())
+      metric_name = "_".join(path)
+      print("%s%s %s" % (metric_name, dict(labels), value))
+      sys.stdout.flush()
+      if metric_name not in self.gauge_cache:
+        gauge = prometheus_client.core.GaugeMetricFamily(metric_name, "Help text", labels=label_keys)
+        self.gauge_cache[metric_name] = gauge
+      else:
+        gauge = self.gauge_cache[metric_name]
+      gauge.add_metric(label_values, float(value))
+
+  def record_ts_for_obj(self, obj, labels, path):
     for key, value in obj.items():
       key_path = list(path)
       key_path.append(key)
+      self.record_ts_for_thing(value, labels, key_path)
 
-      if isinstance(value, dict):
-        self.record_ts_for_obj(value, labels, path=key_path)
-
-      elif isinstance(value, numbers.Number):
-        label_keys, label_values = zip(*labels.items())
-        metric_name = "_".join(key_path)
-        if metric_name not in self.gauge_cache:
-          gauge = prometheus_client.core.GaugeMetricFamily(metric_name, "Help text", labels=label_keys)
-          self.gauge_cache[metric_name] = gauge
-        else:
-          gauge = self.gauge_cache[metric_name]
-        gauge.add_metric(label_values, value)
+  def record_ts_for_list(self, ls, labels, path):
+    key = path.pop()
+    for i, value in enumerate(ls):
+      labels = collections.OrderedDict(labels)
+      labels[key] = str(i)
+      self.record_ts_for_thing(value, labels, path)
 
 
-def labels_for_deployment(dep):
-  return {
-    "namespace": safe_lookup(dep, ["metadata", "namespace"], default="default"),
-    "name": safe_lookup(dep, ["metadata", "name"], default=""),
-  }
-
+def labels_for(obj):
+  labels = collections.OrderedDict()
+  labels["namespace"] = safe_lookup(obj, ["metadata", "namespace"], default="default")
+  labels["name"] = safe_lookup(obj, ["metadata", "name"], default="")
+  return labels
 
 def safe_lookup(d, ks, default=None):
   for k in ks:
