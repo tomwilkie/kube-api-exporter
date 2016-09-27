@@ -39,8 +39,6 @@ class KubernetesAPIExporter(object):
     elif isinstance(value, numbers.Number):
       label_keys, label_values = zip(*labels.items())
       metric_name = "_".join(path)
-      print("%s%s %s" % (metric_name, dict(labels), value))
-      sys.stdout.flush()
       if metric_name not in self.gauge_cache:
         gauge = prometheus_client.core.GaugeMetricFamily(metric_name, "Help text", labels=label_keys)
         self.gauge_cache[metric_name] = gauge
