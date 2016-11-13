@@ -26,6 +26,16 @@ class KubernetesAPIExporter(object):
       labels = labels_for(pod.obj)
       self.record_ts_for_thing(pod.obj, labels, ["k8s", "pod"])
 
+    pykube.ReplicationController.objects.namespace = None
+    for pod in pykube.ReplicationController.objects(api).all():
+      labels = labels_for(pod.obj)
+      self.record_ts_for_thing(pod.obj, labels, ["k8s", "rc"])
+
+    pykube.DaemonSet.objects.namespace = None
+    for pod in pykube.DaemonSet.objects(api).all():
+      labels = labels_for(pod.obj)
+      self.record_ts_for_thing(pod.obj, labels, ["k8s", "ds"])
+
     for gauge in self.gauge_cache.values():
       yield gauge
 
