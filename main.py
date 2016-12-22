@@ -90,7 +90,7 @@ def sigterm_handler(_signo, _stack_frame):
 if __name__ == "__main__":
   parser =  optparse.OptionParser("""usage: %prog [options]""")
   parser.add_option("--port",
-    dest="port", default=80,
+    dest="port", default=80, type="int",
     help="Port to serve HTTP interface")
   (options, args) = parser.parse_args()
 
@@ -98,7 +98,7 @@ if __name__ == "__main__":
 
   api = pykube.HTTPClient(pykube.KubeConfig.from_service_account())
   prometheus_client.REGISTRY.register(KubernetesAPIExporter(api))
-  prometheus_client.start_http_server(int(options.port))
+  prometheus_client.start_http_server(options.port)
 
   signal.signal(signal.SIGTERM, sigterm_handler)
   while True:
