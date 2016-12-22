@@ -6,7 +6,6 @@
 import numbers, string, optparse, time, signal, logging, sys, collections
 import pykube, prometheus_client, prometheus_client.core
 
-
 class KubernetesAPIExporter(object):
 
   def __init__(self, api):
@@ -99,7 +98,7 @@ if __name__ == "__main__":
 
   api = pykube.HTTPClient(pykube.KubeConfig.from_service_account())
   prometheus_client.REGISTRY.register(KubernetesAPIExporter(api))
-  prometheus_client.start_http_server(options.port)
+  prometheus_client.start_http_server(int(options.port))
 
   signal.signal(signal.SIGTERM, sigterm_handler)
   while True:
