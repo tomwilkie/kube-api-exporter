@@ -6,7 +6,6 @@
 import numbers, string, optparse, time, signal, logging, sys, collections
 import pykube, prometheus_client, prometheus_client.core
 
-
 class KubernetesAPIExporter(object):
 
   def __init__(self, api):
@@ -91,7 +90,7 @@ def sigterm_handler(_signo, _stack_frame):
 if __name__ == "__main__":
   parser =  optparse.OptionParser("""usage: %prog [options]""")
   parser.add_option("--port",
-    dest="port", default=80,
+    dest="port", default=80, type="int",
     help="Port to serve HTTP interface")
   (options, args) = parser.parse_args()
 
