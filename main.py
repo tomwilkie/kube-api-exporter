@@ -69,11 +69,28 @@ class KubernetesAPIExporter(object):
       self.record_ts_for_thing(value, labels, path)
 
 
+class PodLabelExporter(object):
+
+  def __init__(self, api):
+    self.api = api
+
+  def collect(self):
+    pykube.Pod.objects.namespace = None
+    for pod in pykube.Pod.objects(api).all():
+      label_keys = [key.replace("-", "_") for key in pod.obj["metadata"]["labels"].keys()]
+      label_keys = label_keys + ["namespace", "pod_name"]
+      label_values = list(pod.obj["metadata"]["labels"].values()) + [safe_lookup(pod.obj, ["metadata", "namespace"], "default"), safe_lookup(pod.obj, ["metadata", "name"])]
+      metric = prometheus_client.core.GaugeMetricFamily("k8s_pod_labels", "Help text", labels=label_keys)
+      metric.add_metric(label_values, 1.0)
+      yield metric
+
+
 def labels_for(obj):
   labels = collections.OrderedDict()
   labels["namespace"] = safe_lookup(obj, ["metadata", "namespace"], default="default")
   labels["name"] = safe_lookup(obj, ["metadata", "name"], default="")
   return labels
+
 
 def safe_lookup(d, ks, default=None):
   for k in ks:
@@ -98,6 +115,7 @@ if __name__ == "__main__":
 
   api = pykube.HTTPClient(pykube.KubeConfig.from_service_account())
   prometheus_client.REGISTRY.register(KubernetesAPIExporter(api))
+  prometheus_client.REGISTRY.register(PodLabelExporter(api))
   prometheus_client.start_http_server(options.port)
 
   signal.signal(signal.SIGTERM, sigterm_handler)
