@@ -23,6 +23,10 @@ class KubernetesAPIExporter(object):
       labels = labels_for(pod.obj)
       self.record_ts_for_thing(pod.obj, labels, ["k8s", "pod"])
 
+    for job in pykube.Job.objects(api).all():
+      labels = labels_for(job.obj)
+      self.record_ts_for_thing(job.obj, labels, ["k8s", "job"])
+
     for pod in pykube.ReplicationController.objects(api).all():
       labels = labels_for(pod.obj)
       self.record_ts_for_thing(pod.obj, labels, ["k8s", "rc"])
