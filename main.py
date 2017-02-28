@@ -72,14 +72,41 @@ class PodLabelExporter(object):
     yield metric
 
 
+class PodImageExporter(object):
+  """Export the images that are on a pod."""
+
+  def __init__(self, api):
+    self.api = api
+
+  def collect(self):
+    metric = prometheus_client.core.GaugeMetricFamily("k8s_pod_images", "Timeseries with spec'd images for the pod, always 1.0, for joining.")
+    for pod in pykube.Pod.objects(self.api).all():
+      for image in iter_pod_images(pod):
+        metric.samples.append((metric.name, image, 1.0))
+    yield metric
+
+
 def get_pod_labels(pod):
   metadata = pod.obj.get('metadata', {})
   unprocessed_labels = metadata.get('labels', {})
   unprocessed_labels.update({
     'namespace': metadata.get('namespace', "default"),
-    'pod_name': metadata.get('name', "")
+    'pod_name': metadata.get('name', ""),
   })
   return {k.replace('-', '_').replace('/', '_').replace('.', '_'): v for k, v in unprocessed_labels.items()}
+
+
+def iter_pod_images(pod):
+  """Iterate through the images specified for containers in a pod."""
+  metadata = pod.obj.get('metadata', {})
+  containers = pod.obj.get('spec', {}).get('containers', [])
+  for container in containers:
+    yield {
+      'namespace': metadata.get('namespace', "default"),
+      'pod_name': metadata.get('name', ""),
+      'container_name': container.get('name', ""),
+      'image': container.get('image', ""),
+    }
 
 
 def labels_for(obj):
@@ -109,6 +136,7 @@ def main():
   api.config.contexts[api.config.current_context]["namespace"] = None # Hack to fetch objects from all namespaces
   prometheus_client.REGISTRY.register(KubernetesAPIExporter(api))
   prometheus_client.REGISTRY.register(PodLabelExporter(api))
+  prometheus_client.REGISTRY.register(PodImageExporter(api))
   prometheus_client.start_http_server(options.port)
 
   signal.signal(signal.SIGTERM, sigterm_handler)
