@@ -84,25 +84,21 @@ class PodLabelExporter(object):
 
 
 def get_pod_labels(pod):
-  unprocessed_labels = safe_lookup(pod.obj, ["metadata", "labels"], {})
-  unprocessed_labels["namespace"] = safe_lookup(pod.obj, ["metadata", "namespace"], "default")
-  unprocessed_labels["pod_name"] = safe_lookup(pod.obj, ["metadata", "name"])
+  metadata = pod.obj.get('metadata', {})
+  unprocessed_labels = metadata.get('labels', {})
+  unprocessed_labels.update({
+    'namespace': metadata.get('namespace', "default"),
+    'pod_name': metadata.get('name', "")
+  })
   return {k.replace('-', '_').replace('/', '_').replace('.', '_'): v for k, v in unprocessed_labels.items()}
 
 
 def labels_for(obj):
+  metadata = obj.get('metadata', {})
   labels = collections.OrderedDict()
-  labels["namespace"] = safe_lookup(obj, ["metadata", "namespace"], default="default")
-  labels["name"] = safe_lookup(obj, ["metadata", "name"], default="")
+  labels["namespace"] = metadata.get('namespace', "default")
+  labels["name"] = metadata.get('name', "")
   return labels
-
-
-def safe_lookup(d, ks, default=None):
-  for k in ks:
-    if k not in d:
-      return default
-    d = d[k]
-  return d
 
 
 def sigterm_handler(_signo, _stack_frame):
