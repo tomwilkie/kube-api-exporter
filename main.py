@@ -50,16 +50,14 @@ class KubernetesAPIExporter(object):
 
   def record_ts_for_obj(self, obj, labels, path, gauge_cache):
     for key, value in obj.items():
-      key_path = list(path)
-      key_path.append(key)
-      self.record_ts_for_thing(value, labels, key_path, gauge_cache)
+      self.record_ts_for_thing(value, labels, path + [key], gauge_cache)
 
   def record_ts_for_list(self, ls, labels, path, gauge_cache):
-    key = path.pop()
+    new_path, key = path[:-1], path[-1]
     for i, value in enumerate(ls):
       labels = collections.OrderedDict(labels)
       labels[key] = str(i)
-      self.record_ts_for_thing(value, labels, path, gauge_cache)
+      self.record_ts_for_thing(value, labels, new_path, gauge_cache)
 
 
 class PodLabelExporter(object):
