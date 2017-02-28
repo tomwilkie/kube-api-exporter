@@ -78,13 +78,16 @@ class PodLabelExporter(object):
     metric = prometheus_client.core.GaugeMetricFamily("k8s_pod_labels", "Timeseries with the labels for the pod, always 1.0, for joining.")
 
     for pod in pykube.Pod.objects(api).all():
-      unprocessed_labels = safe_lookup(pod.obj, ["metadata", "labels"], {})
-      unprocessed_labels["namespace"] = safe_lookup(pod.obj, ["metadata", "namespace"], "default")
-      unprocessed_labels["pod_name"] = safe_lookup(pod.obj, ["metadata", "name"])
-      labels = {k.replace('-', '_').replace('/', '_').replace('.', '_'): v for k, v in unprocessed_labels.items()}
-      metric.samples.append((metric.name, labels, 1.0))
+      metric.samples.append((metric.name, get_pod_labels(pod), 1.0))
 
     yield metric
+
+
+def get_pod_labels(pod):
+  unprocessed_labels = safe_lookup(pod.obj, ["metadata", "labels"], {})
+  unprocessed_labels["namespace"] = safe_lookup(pod.obj, ["metadata", "namespace"], "default")
+  unprocessed_labels["pod_name"] = safe_lookup(pod.obj, ["metadata", "name"])
+  return {k.replace('-', '_').replace('/', '_').replace('.', '_'): v for k, v in unprocessed_labels.items()}
 
 
 def labels_for(obj):
