@@ -9,6 +9,14 @@ import pykube, prometheus_client, prometheus_client.core
 
 class KubernetesAPIExporter(object):
 
+  KINDS = {
+    'deployment': pykube.Deployment,
+    'pod': pykube.Pod,
+    'job': pykube.Job,
+    'rc': pykube.ReplicationController,
+    'ds': pykube.DaemonSet,
+  }
+
   def __init__(self, api):
     self.api = api
     self.gauge_cache = {}
@@ -16,25 +24,10 @@ class KubernetesAPIExporter(object):
   def collect(self):
     self.gauge_cache = {}
 
-    for deployment in pykube.Deployment.objects(self.api).all():
-      labels = labels_for(deployment.obj)
-      self.record_ts_for_thing(deployment.obj, labels, ["k8s", "deployment"])
-
-    for pod in pykube.Pod.objects(self.api).all():
-      labels = labels_for(pod.obj)
-      self.record_ts_for_thing(pod.obj, labels, ["k8s", "pod"])
-
-    for job in pykube.Job.objects(self.api).all():
-      labels = labels_for(job.obj)
-      self.record_ts_for_thing(job.obj, labels, ["k8s", "job"])
-
-    for pod in pykube.ReplicationController.objects(self.api).all():
-      labels = labels_for(pod.obj)
-      self.record_ts_for_thing(pod.obj, labels, ["k8s", "rc"])
-
-    for pod in pykube.DaemonSet.objects(self.api).all():
-      labels = labels_for(pod.obj)
-      self.record_ts_for_thing(pod.obj, labels, ["k8s", "ds"])
+    for tag, kind in self.KINDS.items():
+      for thing in kind.objects(self.api).all():
+        labels = labels_for(thing.obj)
+        self.record_ts_for_thing(thing.obj, labels, ["k8s", tag])
 
     for gauge in self.gauge_cache.values():
       yield gauge
