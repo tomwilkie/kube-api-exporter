@@ -19,48 +19,47 @@ class KubernetesAPIExporter(object):
 
   def __init__(self, api):
     self.api = api
-    self.gauge_cache = {}
 
   def collect(self):
-    self.gauge_cache = {}
-
     for tag, kind in self.KINDS.items():
+      gauge_cache = {}
+
       for thing in kind.objects(self.api).all():
         labels = labels_for(thing.obj)
-        self.record_ts_for_thing(thing.obj, labels, ["k8s", tag])
+        self.record_ts_for_thing(thing.obj, labels, ["k8s", tag], gauge_cache)
 
-    for gauge in self.gauge_cache.values():
-      yield gauge
+      for gauge in gauge_cache.values():
+        yield gauge
 
-  def record_ts_for_thing(self, value, labels, path):
+  def record_ts_for_thing(self, value, labels, path, gauge_cache):
     if isinstance(value, dict):
-      self.record_ts_for_obj(value, labels, path)
+      self.record_ts_for_obj(value, labels, path, gauge_cache)
 
     elif isinstance(value, list):
-      self.record_ts_for_list(value, labels, path)
+      self.record_ts_for_list(value, labels, path, gauge_cache)
 
     elif isinstance(value, numbers.Number):
       label_keys, label_values = zip(*labels.items())
       metric_name = "_".join(path)
-      if metric_name not in self.gauge_cache:
+      if metric_name not in gauge_cache:
         gauge = prometheus_client.core.GaugeMetricFamily(metric_name, "Help text", labels=label_keys)
-        self.gauge_cache[metric_name] = gauge
+        gauge_cache[metric_name] = gauge
       else:
-        gauge = self.gauge_cache[metric_name]
+        gauge = gauge_cache[metric_name]
       gauge.add_metric(label_values, float(value))
 
-  def record_ts_for_obj(self, obj, labels, path):
+  def record_ts_for_obj(self, obj, labels, path, gauge_cache):
     for key, value in obj.items():
       key_path = list(path)
       key_path.append(key)
-      self.record_ts_for_thing(value, labels, key_path)
+      self.record_ts_for_thing(value, labels, key_path, gauge_cache)
 
-  def record_ts_for_list(self, ls, labels, path):
+  def record_ts_for_list(self, ls, labels, path, gauge_cache):
     key = path.pop()
     for i, value in enumerate(ls):
       labels = collections.OrderedDict(labels)
       labels[key] = str(i)
-      self.record_ts_for_thing(value, labels, path)
+      self.record_ts_for_thing(value, labels, path, gauge_cache)
 
 
 class PodLabelExporter(object):
@@ -70,10 +69,8 @@ class PodLabelExporter(object):
 
   def collect(self):
     metric = prometheus_client.core.GaugeMetricFamily("k8s_pod_labels", "Timeseries with the labels for the pod, always 1.0, for joining.")
-
     for pod in pykube.Pod.objects(self.api).all():
       metric.samples.append((metric.name, get_pod_labels(pod), 1.0))
-
     yield metric
 
 
