@@ -3,8 +3,9 @@
 # Kubernetes API Exporter - expose various numbers from the Kubernetes API as
 # Prometheus metrics, such that you can alert on them.
 
-import numbers, string, optparse, time, signal, logging, sys, collections
+import numbers, optparse, time, signal, logging, sys, collections
 import pykube, prometheus_client, prometheus_client.core
+
 
 class KubernetesAPIExporter(object):
 
@@ -15,23 +16,23 @@ class KubernetesAPIExporter(object):
   def collect(self):
     self.gauge_cache = {}
 
-    for deployment in pykube.Deployment.objects(api).all():
+    for deployment in pykube.Deployment.objects(self.api).all():
       labels = labels_for(deployment.obj)
       self.record_ts_for_thing(deployment.obj, labels, ["k8s", "deployment"])
 
-    for pod in pykube.Pod.objects(api).all():
+    for pod in pykube.Pod.objects(self.api).all():
       labels = labels_for(pod.obj)
       self.record_ts_for_thing(pod.obj, labels, ["k8s", "pod"])
 
-    for job in pykube.Job.objects(api).all():
+    for job in pykube.Job.objects(self.api).all():
       labels = labels_for(job.obj)
       self.record_ts_for_thing(job.obj, labels, ["k8s", "job"])
 
-    for pod in pykube.ReplicationController.objects(api).all():
+    for pod in pykube.ReplicationController.objects(self.api).all():
       labels = labels_for(pod.obj)
       self.record_ts_for_thing(pod.obj, labels, ["k8s", "rc"])
 
-    for pod in pykube.DaemonSet.objects(api).all():
+    for pod in pykube.DaemonSet.objects(self.api).all():
       labels = labels_for(pod.obj)
       self.record_ts_for_thing(pod.obj, labels, ["k8s", "ds"])
 
@@ -77,7 +78,7 @@ class PodLabelExporter(object):
   def collect(self):
     metric = prometheus_client.core.GaugeMetricFamily("k8s_pod_labels", "Timeseries with the labels for the pod, always 1.0, for joining.")
 
-    for pod in pykube.Pod.objects(api).all():
+    for pod in pykube.Pod.objects(self.api).all():
       metric.samples.append((metric.name, get_pod_labels(pod), 1.0))
 
     yield metric
@@ -105,7 +106,7 @@ def sigterm_handler(_signo, _stack_frame):
   sys.exit(0)
 
 
-if __name__ == "__main__":
+def main():
   logging.basicConfig(level=logging.INFO)
 
   parser =  optparse.OptionParser("""usage: %prog [options]""")
@@ -125,3 +126,7 @@ if __name__ == "__main__":
   signal.signal(signal.SIGTERM, sigterm_handler)
   while True:
     time.sleep(1)
+
+
+if __name__ == '__main__':
+  main()
