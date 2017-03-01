@@ -10,11 +10,11 @@ import pykube, prometheus_client, prometheus_client.core
 class KubernetesAPIExporter(object):
 
   KINDS = {
-    'deployment': pykube.Deployment,
-    'pod': pykube.Pod,
-    'job': pykube.Job,
-    'rc': pykube.ReplicationController,
-    'ds': pykube.DaemonSet,
+    "deployment": pykube.Deployment,
+    "pod": pykube.Pod,
+    "job": pykube.Job,
+    "rc": pykube.ReplicationController,
+    "ds": pykube.DaemonSet,
   }
 
   def __init__(self, api):
@@ -87,33 +87,33 @@ class PodImageExporter(object):
 
 
 def get_pod_labels(pod):
-  metadata = pod.obj.get('metadata', {})
-  unprocessed_labels = metadata.get('labels', {})
+  metadata = pod.obj.get("metadata", {})
+  unprocessed_labels = metadata.get("labels", {})
   unprocessed_labels.update({
-    'namespace': metadata.get('namespace', "default"),
-    'pod_name': metadata.get('name', ""),
+    "namespace": metadata.get("namespace", "default"),
+    "pod_name": metadata.get("name", ""),
   })
-  return {k.replace('-', '_').replace('/', '_').replace('.', '_'): v for k, v in unprocessed_labels.items()}
+  return {k.replace("-", "_").replace("/", "_").replace(".", "_"): v for k, v in unprocessed_labels.items()}
 
 
 def iter_pod_images(pod):
   """Iterate through the images specified for containers in a pod."""
-  metadata = pod.obj.get('metadata', {})
-  containers = pod.obj.get('spec', {}).get('containers', [])
+  metadata = pod.obj.get("metadata", {})
+  containers = pod.obj.get("spec", {}).get("containers", [])
   for container in containers:
     yield {
-      'namespace': metadata.get('namespace', "default"),
-      'pod_name': metadata.get('name', ""),
-      'container_name': container.get('name', ""),
-      'image': container.get('image', ""),
+      "namespace": metadata.get("namespace", "default"),
+      "pod_name": metadata.get("name", ""),
+      "container_name": container.get("name", ""),
+      "image": container.get("image", ""),
     }
 
 
 def labels_for(obj):
-  metadata = obj.get('metadata', {})
+  metadata = obj.get("metadata", {})
   labels = collections.OrderedDict()
-  labels["namespace"] = metadata.get('namespace', "default")
-  labels["name"] = metadata.get('name', "")
+  labels["namespace"] = metadata.get("namespace", "default")
+  labels["name"] = metadata.get("name", "")
   return labels
 
 
@@ -144,5 +144,5 @@ def main():
     time.sleep(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
   main()
