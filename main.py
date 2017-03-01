@@ -3,70 +3,61 @@
 # Kubernetes API Exporter - expose various numbers from the Kubernetes API as
 # Prometheus metrics, such that you can alert on them.
 
-import numbers, string, optparse, time, signal, logging, sys, collections
+import numbers, optparse, time, signal, logging, sys, collections
 import pykube, prometheus_client, prometheus_client.core
+
 
 class KubernetesAPIExporter(object):
 
+  KINDS = {
+    "deployment": pykube.Deployment,
+    "pod": pykube.Pod,
+    "job": pykube.Job,
+    "rc": pykube.ReplicationController,
+    "ds": pykube.DaemonSet,
+  }
+
   def __init__(self, api):
     self.api = api
-    self.gauge_cache = {}
 
   def collect(self):
-    self.gauge_cache = {}
+    for tag, kind in self.KINDS.items():
+      gauge_cache = {}
 
-    for deployment in pykube.Deployment.objects(api).all():
-      labels = labels_for(deployment.obj)
-      self.record_ts_for_thing(deployment.obj, labels, ["k8s", "deployment"])
+      for thing in kind.objects(self.api).all():
+        labels = labels_for(thing.obj)
+        self.record_ts_for_thing(thing.obj, labels, ["k8s", tag], gauge_cache)
 
-    for pod in pykube.Pod.objects(api).all():
-      labels = labels_for(pod.obj)
-      self.record_ts_for_thing(pod.obj, labels, ["k8s", "pod"])
+      for gauge in gauge_cache.values():
+        yield gauge
 
-    for job in pykube.Job.objects(api).all():
-      labels = labels_for(job.obj)
-      self.record_ts_for_thing(job.obj, labels, ["k8s", "job"])
-
-    for pod in pykube.ReplicationController.objects(api).all():
-      labels = labels_for(pod.obj)
-      self.record_ts_for_thing(pod.obj, labels, ["k8s", "rc"])
-
-    for pod in pykube.DaemonSet.objects(api).all():
-      labels = labels_for(pod.obj)
-      self.record_ts_for_thing(pod.obj, labels, ["k8s", "ds"])
-
-    for gauge in self.gauge_cache.values():
-      yield gauge
-
-  def record_ts_for_thing(self, value, labels, path):
+  def record_ts_for_thing(self, value, labels, path, gauge_cache):
     if isinstance(value, dict):
-      self.record_ts_for_obj(value, labels, path)
+      self.record_ts_for_obj(value, labels, path, gauge_cache)
 
     elif isinstance(value, list):
-      self.record_ts_for_list(value, labels, path)
+      self.record_ts_for_list(value, labels, path, gauge_cache)
 
     elif isinstance(value, numbers.Number):
       label_keys, label_values = zip(*labels.items())
       metric_name = "_".join(path)
-      if metric_name not in self.gauge_cache:
+      if metric_name not in gauge_cache:
         gauge = prometheus_client.core.GaugeMetricFamily(metric_name, "Help text", labels=label_keys)
-        self.gauge_cache[metric_name] = gauge
+        gauge_cache[metric_name] = gauge
       else:
-        gauge = self.gauge_cache[metric_name]
+        gauge = gauge_cache[metric_name]
       gauge.add_metric(label_values, float(value))
 
-  def record_ts_for_obj(self, obj, labels, path):
+  def record_ts_for_obj(self, obj, labels, path, gauge_cache):
     for key, value in obj.items():
-      key_path = list(path)
-      key_path.append(key)
-      self.record_ts_for_thing(value, labels, key_path)
+      self.record_ts_for_thing(value, labels, path + [key], gauge_cache)
 
-  def record_ts_for_list(self, ls, labels, path):
-    key = path.pop()
+  def record_ts_for_list(self, ls, labels, path, gauge_cache):
+    new_path, key = path[:-1], path[-1]
     for i, value in enumerate(ls):
       labels = collections.OrderedDict(labels)
       labels[key] = str(i)
-      self.record_ts_for_thing(value, labels, path)
+      self.record_ts_for_thing(value, labels, new_path, gauge_cache)
 
 
 class PodLabelExporter(object):
@@ -76,37 +67,61 @@ class PodLabelExporter(object):
 
   def collect(self):
     metric = prometheus_client.core.GaugeMetricFamily("k8s_pod_labels", "Timeseries with the labels for the pod, always 1.0, for joining.")
-
-    for pod in pykube.Pod.objects(api).all():
-      unprocessed_labels = safe_lookup(pod.obj, ["metadata", "labels"], {})
-      unprocessed_labels["namespace"] = safe_lookup(pod.obj, ["metadata", "namespace"], "default")
-      unprocessed_labels["pod_name"] = safe_lookup(pod.obj, ["metadata", "name"])
-      labels = {k.replace('-', '_').replace('/', '_').replace('.', '_'): v for k, v in unprocessed_labels.items()}
-      metric.samples.append((metric.name, labels, 1.0))
-
+    for pod in pykube.Pod.objects(self.api).all():
+      metric.samples.append((metric.name, get_pod_labels(pod), 1.0))
     yield metric
 
 
+class PodImageExporter(object):
+  """Export the images that are on a pod."""
+
+  def __init__(self, api):
+    self.api = api
+
+  def collect(self):
+    metric = prometheus_client.core.GaugeMetricFamily("k8s_pod_images", "Timeseries with spec'd images for the pod, always 1.0, for joining.")
+    for pod in pykube.Pod.objects(self.api).all():
+      for image in iter_pod_images(pod):
+        metric.samples.append((metric.name, image, 1.0))
+    yield metric
+
+
+def get_pod_labels(pod):
+  metadata = pod.obj.get("metadata", {})
+  unprocessed_labels = metadata.get("labels", {})
+  unprocessed_labels.update({
+    "namespace": metadata.get("namespace", "default"),
+    "pod_name": metadata.get("name", ""),
+  })
+  return {k.replace("-", "_").replace("/", "_").replace(".", "_"): v for k, v in unprocessed_labels.items()}
+
+
+def iter_pod_images(pod):
+  """Iterate through the images specified for containers in a pod."""
+  metadata = pod.obj.get("metadata", {})
+  containers = pod.obj.get("spec", {}).get("containers", [])
+  for container in containers:
+    yield {
+      "namespace": metadata.get("namespace", "default"),
+      "pod_name": metadata.get("name", ""),
+      "container_name": container.get("name", ""),
+      "image": container.get("image", ""),
+    }
+
+
 def labels_for(obj):
+  metadata = obj.get("metadata", {})
   labels = collections.OrderedDict()
-  labels["namespace"] = safe_lookup(obj, ["metadata", "namespace"], default="default")
-  labels["name"] = safe_lookup(obj, ["metadata", "name"], default="")
+  labels["namespace"] = metadata.get("namespace", "default")
+  labels["name"] = metadata.get("name", "")
   return labels
-
-
-def safe_lookup(d, ks, default=None):
-  for k in ks:
-    if k not in d:
-      return default
-    d = d[k]
-  return d
 
 
 def sigterm_handler(_signo, _stack_frame):
   sys.exit(0)
 
 
-if __name__ == "__main__":
+def main():
   logging.basicConfig(level=logging.INFO)
 
   parser =  optparse.OptionParser("""usage: %prog [options]""")
@@ -121,8 +136,13 @@ if __name__ == "__main__":
   api.config.contexts[api.config.current_context]["namespace"] = None # Hack to fetch objects from all namespaces
   prometheus_client.REGISTRY.register(KubernetesAPIExporter(api))
   prometheus_client.REGISTRY.register(PodLabelExporter(api))
+  prometheus_client.REGISTRY.register(PodImageExporter(api))
   prometheus_client.start_http_server(options.port)
 
   signal.signal(signal.SIGTERM, sigterm_handler)
   while True:
     time.sleep(1)
+
+
+if __name__ == "__main__":
+  main()
