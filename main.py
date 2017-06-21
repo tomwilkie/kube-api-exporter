@@ -39,11 +39,9 @@ class KubernetesAPIExporter(object):
       if 'succeeded' not in value['status']:
         value['status']['succeeded'] = 0
 
-      logging.info('padded for labels={}  value={}  type={}'.format(labels, value, type(value)))
-
   def record_ts_for_thing(self, value, labels, path, gauge_cache):
     if isinstance(value, dict):
-      self.pad_succeeded_with_zero(value, labels, path)
+      self.pad_status_with_zero(value, labels, path)
       self.record_ts_for_obj(value, labels, path, gauge_cache)
 
     elif isinstance(value, list):
