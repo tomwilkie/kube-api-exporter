@@ -31,8 +31,19 @@ class KubernetesAPIExporter(object):
       for gauge in gauge_cache.values():
         yield gauge
 
+  def pad_status_with_zero(self, value, labels, path):
+    if path == ['k8s', 'job'] and 'status' in value and ('failed' in value['status'] or 'succeeded' in value['status']):
+      if 'failed' not in value['status']:
+        value['status']['failed'] = 0
+
+      if 'succeeded' not in value['status']:
+        value['status']['succeeded'] = 0
+
+      logging.info('padded for labels={}  value={}  type={}'.format(labels, value, type(value)))
+
   def record_ts_for_thing(self, value, labels, path, gauge_cache):
     if isinstance(value, dict):
+      self.pad_succeeded_with_zero(value, labels, path)
       self.record_ts_for_obj(value, labels, path, gauge_cache)
 
     elif isinstance(value, list):
