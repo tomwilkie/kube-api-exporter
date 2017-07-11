@@ -1,5 +1,8 @@
 # Kubernetes API Exporter for Prometheus
 
+**This project is deprecated, you should use [kubernetes/kube-state-metrics](https://github.com/kubernetes/kube-state-metrics)
+instead.**
+
 Kubernetes API Exporter - a Python job, delivered as a Docker image, that automatically exposes various numbers from the Kubernetes API as Prometheus metrics, such that you can alert on them.
 
 This is useful when you are continually deploying changes from a CI pipeline to a Kubernetes cluster, and you want to generate alerts when a deployments fails.
